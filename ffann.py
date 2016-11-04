@@ -3,23 +3,27 @@
 
 import os, sys, numpy as np, random as r, math
 from sklearn import metrics as skm
-
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
 
 def main():
   # Generate some practice data
-  d = 4
-  [xtrain,ytrain,xtest,ytest] = practiceData(d,2500,50)
+  d = 3
+  [xtrain,ytrain,xtest,ytest] = practiceMultiData(d, nc = 9, ntrain=450, ntest=150) #practiceData(d,2500,50)
   # Create an ANN
-  ffann = FeedForwardArtificialNeuralNetwork(d,numHiddenLayers = 3)
+  ffann = FeedForwardArtificialNeuralNetwork(d, 
+    numHiddenLayers = 3, 
+    alpha = 0.1, 
+    sizeOfHiddenLayers = [7, 7, 9])
+
   ffann.display()
   ffann.train(xtrain,ytrain) 
   y_ann = ffann.predict(xtest)
   ffann.display()
-  performance(ytest,y_ann)
+  ffann.checkPerformance(ytest,y_ann)
 
-# Note: two options for output nodes
-#  - have 19 output nodes (1 for each possible sum value; take the max)
-#  - have a non-sigmoid (e.g. linear) single output node [artificial relation]
+# Note: multiclass input should be given as an integer; it will be converted
+# to 1-hot encoding. 
 
 class FeedForwardArtificialNeuralNetwork(object):
 
@@ -40,18 +44,16 @@ class FeedForwardArtificialNeuralNetwork(object):
   ### Node Class ###
   # ANN node object
   class AnnNode(object): 
-    # Private static variables
-    _weightSigma, _sigmoid = 0.01, lambda z: 1.0 / (1.0 + math.exp(-z))
     # Constructor
     def __init__(self, numBackwardsNodes, layerNum):
+      self._sigmoid, self._weightSigma = lambda z: 1.0 / (1.0 + math.exp(-z)), 0.01
       # Initialize weights to a small number (note bias)
-      self.weights = np.array([ np.random.normal(0.0, FeedForwardArtificialNeuralNetwork.AnnNode._weightSigma) 
+      self.weights = np.array([ np.random.normal(0.0, self._weightSigma) 
                                 for _ in range(0,numBackwardsNodes+1) ])
-      self.nWeights = len(self.weights)
-      self.delta, self.layerIndex = None, layerNum
+      self.delta, self.layerIndex, self.nWeights = None, layerNum, len(self.weights)
     # Sigmoid filter linear combination (implicit 1 for bias weight term)
     def integrate(self,stim):
-      return FeedForwardArtificialNeuralNetwork.AnnNode._sigmoid(np.dot(self.weights[:-1], stim) + self.weights[-1])
+      return self._sigmoid(np.dot(self.weights[:-1], stim) + self.weights[-1])
     # Update single node during backprop
     def update(self,alpha,delta,x):
       self.delta = delta
@@ -66,17 +68,25 @@ class FeedForwardArtificialNeuralNetwork(object):
                numHiddenLayers = 2,     # Number of hidden layers
                alpha = 0.05,            # Learning rate
                sizeOfHiddenLayers = [], # Size of the hidden layers
-               defaultLayerSize = 5 ):  # Defaults for layer sizes (except for the output)
+               defaultLayerSize = 5,    # Defaults for layer sizes (except for the output) 
+               maxIters = 100
+               ):  
 
     # Set defaults for hidden layer size (including single output node default)
+    self.isMulticlass, self.numClasses = False, 1
     if sizeOfHiddenLayers == []:
       sizeOfHiddenLayers = [defaultLayerSize for i in range(0,numHiddenLayers-1)] + [1]
     if type(sizeOfHiddenLayers) is int:
       sizeOfHiddenLayers = [sizeOfHiddenLayers for i in range(0,numHiddenLayers-1)] + [1]
+    if len(sizeOfHiddenLayers) > 1:
+      self.isMulticlass, self.numClasses = True, sizeOfHiddenLayers[-1]
+    # Set to true if the labels should be treated as regression values, not discrete unrelated classes
+    self.treatLabelsRegressively = False
+    self.maxIters = maxIters
     # Error check
     assert len(sizeOfHiddenLayers) == numHiddenLayers, "Untenable hidden layer size mismatch"
     # Insert input nodes implicitly
-    sizeOfHiddenLayers.insert(0,inputSize)
+    sizeOfHiddenLayers.insert(0, inputSize)
     # Save network properties
     self.numInputs, self.alpha = inputSize, alpha
     self.layerSizes = sizeOfHiddenLayers[1:]
@@ -85,25 +95,65 @@ class FeedForwardArtificialNeuralNetwork(object):
     self.layers = [FeedForwardArtificialNeuralNetwork.AnnLayer(sizeOfHiddenLayers[i+1],sizeOfHiddenLayers[i],i) 
                    for i in range(0,numHiddenLayers)]
 
+  def checkPerformance(self, y_true, y_comp):
+    print("\nPerformance")
+    if self.isMulticlass:
+      # PredY (y_comp) will be 1-hot encoded, while trueY will be in the origin encoding
+      # Assumes the encoding is for labels in 0 -> NumClasses
+      normDiff = lambda x,y: np.sqrt(sum([ (x[i] - y[i])**2 for i in range(0,len(x)) ]))
+      maxedYs = [ str(np.argmax(y)) for y in y_comp ]
+      print("max"); print(maxedYs); print("true"); print(y_true)
+      print('Accuracy: ' + str(skm.accuracy_score(y_true,maxedYs)))
+      # Also look at average 1-hot encoded vector metric difference
+      # Little non-sensical though since a reasonable predictor should take the max
+      preprocForEncoder = [[q] for q in y_true]
+      encodedTrue = self.labEncoder.transform(preprocForEncoder).toarray()
+      mean2NormDistance = np.mean([ normDiff(u,v) for u,v in zip(encodedTrue,y_comp) ])
+      print("Mean 2-norm 1-hot vec dist: " + str(mean2NormDistance))
+    else: # For binary classification, do some extra things
+      y_c = [ 1 if q[0] > 0.5 else 0 for q in y_comp ]
+      print('Accuracy: ' + str(skm.accuracy_score(y_true,y_c)))
+      print('F1: ' + str(skm.f1_score(y_true,y_c)))
+      se = sum( [ (yt - yc[0])**2 for yt,yc in zip(y_true,y_comp) ] ) / float(len(y_c))
+      print('Average Squared Error: ' + str( se ))
+
   # Training method
   def train(self,X,Y,method=1):
+    # Scale the data (the same scaler will be applied to the test data, but not fit to it of course)
+    self.scaler = StandardScaler()
+    self.scaler.fit( X )
+    X = self.scaler.transform( X )
+    # Preprocess multiclass data
+    if self.isMulticlass:
+      self.labEncoder = OneHotEncoder()
+      Y = self.labEncoder.fit_transform([ [lab] for lab in Y ]).toarray()
+    # Checks
+    islist = lambda x: isinstance(x, list)
     assert method in [1], "Unknown training method"
+    assert not islist(Y[0]) or (islist(Y[0]) and len(Y[0])==self.numClasses), "Label size mismatch"
     # Method 1: run backprop once per x \in X
     if method == 1:
-      epsilon = 0.001
-      maxIters = 50
-      ws = self.weightVec()
-      for _ in range(0,maxIters):
-        for v,y in zip(X,Y): 
+      epsilon, maxIters, minIters, verbose = 0.0000001, self.maxIters, 250, True ####################################
+      p, ws = lambda x: sys.stdout.write(x), self.weightVec()
+      for gen in range(0,maxIters):
+        if verbose: p("Iter " + str(gen) + ": ")
+        else: 
+          if gen % 50 == 0: p("Iter "+str(gen)+"\n") 
+        for i,(v,y) in enumerate(zip(X,Y)): 
+          if verbose:
+            if i == len(X)   / 4: p("25%.")
+            elif i == len(X)   / 2: p("..50%.")
+            elif i == 3*len(X) / 4: p("..75%\n")
           self._backpropagateTrainingSingle(v, y)
-        currWs = self.weightVec()
+        currWs = self.weightVec() 
         avgdiff = np.mean( [ abs(a - b) for a,b in zip(ws,currWs) ] )
-        if avgdiff < epsilon: return
+        if avgdiff < epsilon and gen > minIters: return
         else: ws = currWs
 
-
   # Testing method
-  def predict(self,X): return [ self.computeOutput(t) for t in X ]
+  def predict(self,X): 
+    X = self.scaler.transform( X )
+    return [ self.computeOutput(t) for t in X ]
 
   def weightVec(self):
     ws = []
@@ -115,7 +165,7 @@ class FeedForwardArtificialNeuralNetwork(object):
 
   # Print out the ANN
   def display(self):
-    print('Input dimensions ' + str(self.numInputs))
+    print("Current ANN Status\n" + 'Input dimensions ' + str(self.numInputs))
     print('Params: alpha = ' + str(self.alpha) + ", numLayers = " + str(self.nLayers))
     for i,s in enumerate(self.layerSizes):
       sys.stdout.write( str(s) + ( '' if i==self.nLayers-1 else ' -> ' ) )
@@ -140,22 +190,26 @@ class FeedForwardArtificialNeuralNetwork(object):
   def _backpropagateTrainingSingle(self, x, y_true):
     o, alpha = self.computeOutput(x,True), self.alpha
     # Update final output nodes
-    delta_final = [ o[-1][i] * (1 - o[-1][i]) * (y_true - o[-1][i])  
+    if self.isMulticlass:
+      assert len(y_true) == self.layers[-1].numNodes, "Labeler length mismatch"
+      delta_final = [ o[-1][i] * (1 - o[-1][i]) * (y_true[i] - o[-1][i])  
+                    for i in range(0, self.layers[-1].numNodes) ]
+    else:
+      delta_final = [ o[-1][i] * (1 - o[-1][i]) * (y_true - o[-1][i])  
                     for i in range(0, self.layers[-1].numNodes) ]
     self.layers[-1].update(alpha, delta_final, o[-2])
     # Update hidden layers
     for i in range(self.nLayers - 2, -1, -1):
       # CurrLayer = i, delta_i = x_i(1-x_i)sum_k w_ik delta_k
       for j,neuron in enumerate(self.layers[i].nodes):
-        downstreamLayer = self.layers[i+1]
-        deltaProj = 0.0
+        downstreamLayer, deltaProj = self.layers[i+1], 0.0
         for forwardNeuron in downstreamLayer.nodes: 
           deltaProj += forwardNeuron.weights[j] * forwardNeuron.delta
         x_out = o[i+1][j] # Output for this layer, this neuron
-        deltaCurr = deltaProj * x_out * (1.0 - x_out) # 
+        deltaCurr = deltaProj * x_out * (1.0 - x_out) # Delta for this layer
         neuron.update(alpha, deltaCurr, o[i])
 
-# Simple method for generating some practice data
+# Simple method for generating some practice data for binary classification
 def practiceData(d, ntrain=100, ntest=50):
   n = int( (ntrain + ntest) / 2 )
   mu1, mu2, sigma1, sigma2 = 1, 9, 4, 5
@@ -165,18 +219,18 @@ def practiceData(d, ntrain=100, ntest=50):
   x, y = [ x_u[i] for i in index_shuffled ], [ y_u[i] for i in index_shuffled]
   return [ x[0:ntrain], y[0:ntrain], x[ntrain:], y[ntrain:] ]
 
-# TODO issues if output node is not scalar
-def performance(y_true, y_comp):
-  y_c = [ 1 if q[0] > 0.5 else 0 for q in y_comp ]
-  print("\nPerformance")
-#  print(y_c)
-#  print(y_comp)
-#  print(y_true)
-  print('Accuracy: ' + str(skm.accuracy_score(y_true,y_c)))
-  print('F1: ' + str(skm.f1_score(y_true,y_c)))
-  se = sum( [ (yt - yc[0])**2 for yt,yc in zip(y_true,y_comp) ] ) / float(len(y_c))
-  print('Average Squared Error: ' + str( se ))
-
+# Generates simple data set for testing multi-class classification
+def practiceMultiData(d, nc=10, ntrain=500, ntest=50):
+  n = int( (ntrain + ntest) / nc )
+  means, variance = list(range(0,nc)), 0.2
+  dataNest = ( np.random.normal(mean, variance,(n,d)) for mean in means )
+  labNest = [ [k]*n for k in means ]
+  flat = lambda xs: [w for u in xs for w in u]
+  dataFlat, labFlat = flat(dataNest), flat(labNest)
+  index_shuffled = list(range( n*nc ))
+  r.shuffle(index_shuffled)
+  x, y = [ dataFlat[i] for i in index_shuffled ], [ labFlat[i] for i in index_shuffled]
+  return [ x[0:ntrain], y[0:ntrain], x[ntrain:], y[ntrain:] ]
 
 ### Main Method Invocation ###
 if __name__ == '__main__': main()
