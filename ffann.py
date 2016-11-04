@@ -2,10 +2,15 @@
 # 10/30/16
 
 import os, sys, numpy as np, random as r, math
+
+# Used for performance measurement
 from sklearn import metrics as skm
+
+# Used for preprocessing the given image data
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 
+# For testing the ANN
 def main():
   # Generate some practice data
   d = 3
@@ -22,9 +27,10 @@ def main():
   ffann.display()
   ffann.checkPerformance(ytest,y_ann)
 
+### Implementation of Feed-Forward Fully Connected Artificla Neural Network ###
+# Uses back-propagation with gradient descent, based on squared error loss 
 # Note: multiclass input should be given as an integer; it will be converted
-# to 1-hot encoding. 
-
+# to a 1-hot encoding. 
 class FeedForwardArtificialNeuralNetwork(object):
 
   ### Layer Class ###
@@ -95,13 +101,16 @@ class FeedForwardArtificialNeuralNetwork(object):
     self.layers = [FeedForwardArtificialNeuralNetwork.AnnLayer(sizeOfHiddenLayers[i+1],sizeOfHiddenLayers[i],i) 
                    for i in range(0,numHiddenLayers)]
 
-  def checkPerformance(self, y_true, y_comp):
-    print("\nPerformance")
+  def checkPerformance(self, y_true, y_comp, short=False):
     if self.isMulticlass:
       # PredY (y_comp) will be 1-hot encoded, while trueY will be in the origin encoding
       # Assumes the encoding is for labels in 0 -> NumClasses
       normDiff = lambda x,y: np.sqrt(sum([ (x[i] - y[i])**2 for i in range(0,len(x)) ]))
       maxedYs = [ str(np.argmax(y)) for y in y_comp ]
+      if short:
+        print("Acc = " + str(skm.accuracy_score(y_true,maxedYs)))
+        return
+      print("\nPerformance")
       print("max"); print(maxedYs); print("true"); print(y_true)
       print('Accuracy: ' + str(skm.accuracy_score(y_true,maxedYs)))
       # Also look at average 1-hot encoded vector metric difference
@@ -117,8 +126,60 @@ class FeedForwardArtificialNeuralNetwork(object):
       se = sum( [ (yt - yc[0])**2 for yt,yc in zip(y_true,y_comp) ] ) / float(len(y_c))
       print('Average Squared Error: ' + str( se ))
 
+  # 
+  @staticmethod
+  def crossValidate(x,y,maxIters=3):
+    ### Parameters ###
+    # Number of layers (1 + output vs 2 + output)
+    layerNumbers = [2, 3]
+    # Architectures: for 2 layer and 3 layer
+    sizes = [10,20,30,40]
+    layerArch2 = [ [s] for s in sizes ]
+    layerArch3 = [ [i,j] for i in sizes for j in sizes ]  
+    # Alpha values
+    alphas = [0.05, 0.1]
+
+    ### Preprocessing ###
+    classSize = 19
+    layerArch2 = [u + [classSize] for u in layerArch2]
+    layerArch3 = [u + [classSize] for u in layerArch3]
+
+    ### Single CV Run ###
+    def annCv(alpha,layerNum,hiddenLayerSizes):
+      dim = len(x[0])
+      ffann = FeedForwardArtificialNeuralNetwork(
+          dim, 
+          numHiddenLayers = layerNum, 
+          alpha = alpha, 
+          sizeOfHiddenLayers = hiddenLayerSizes,
+          maxIters = maxIters)
+      print(str(alpha) + ", " + str(hiddenLayerSize))
+#      ffann.display()
+#      ss, ts = trainSize, trainSize + testSize
+      n = len(x) / 2
+#      xtrain, ytrain, xtest, ytest = x[0:n], y[0:n], x[n:], y[n:]  # x[0:ss], y[0:ss], x[ss:ts], y[ss:ts]
+      def cv2(xtrain,ytrain,xtest,ytest):
+        ffann.train(xtrain,ytrain,silent=True) 
+        y_ann = ffann.predict(xtest,silent=True)
+        ffann.checkPerformance(ytest, y_ann, short=True)
+      cv2(x[0:n], y[0:n], x[n:], y[n:])
+      cv2(x[n:], y[n:], x[0:n], y[0:n])
+      print("----")      
+
+    ### Cross-validate for hyper-parameter selection ###
+    totalNum = len(layerArch2 + layerArch3) * len(alphas)
+    print("Total = " + str(totalNum) + "\n")
+    for alpha in alphas:
+      for layerNum in layerNumbers:
+        if layerNum == 2:
+          for hiddenLayerSize in layerArch2:
+            annCv(alpha, layerNum, hiddenLayerSize)
+        elif layerNum == 3:
+          for hiddenLayerSize in layerArch3:
+            annCv(alpha, layerNum, hiddenLayerSize)
+
   # Training method
-  def train(self,X,Y,method=1):
+  def train(self,X,Y,method=1, silent=False):
     # Scale the data (the same scaler will be applied to the test data, but not fit to it of course)
     self.scaler = StandardScaler()
     self.scaler.fit( X )
@@ -134,10 +195,11 @@ class FeedForwardArtificialNeuralNetwork(object):
     # Method 1: run backprop once per x \in X
     if method == 1:
       epsilon, maxIters, minIters, verbose = 0.0000001, self.maxIters, 250, True ####################################
+      if silent: verbose = False
       p, ws = lambda x: sys.stdout.write(x), self.weightVec()
       for gen in range(0,maxIters):
         if verbose: p("Iter " + str(gen) + ": ")
-        else: 
+        elif not silent: 
           if gen % 50 == 0: p("Iter "+str(gen)+"\n") 
         for i,(v,y) in enumerate(zip(X,Y)): 
           if verbose:
