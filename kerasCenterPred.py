@@ -9,7 +9,7 @@ import warnings
 # Whether to generate a new model for autoencoding mnist or test knn with it on the new data
 makeModel = False
 # Prediction mode
-predMode = 2
+predMode = 1
 ###
 
 if makeModel:
@@ -189,6 +189,7 @@ elif predMode == 1:
 			elif i == 3*totalN/4: print("\t75%")
 			
 			if useCenters:
+				print("Using centers")
 				currCens = cens[i]
 				x1,y1 = currCens[0]-1, currCens[1]-1
 				x2,y2 = currCens[2]-1, currCens[3]-1
@@ -255,6 +256,7 @@ elif predMode == 1:
 						if dmap.get(predLabel) is None or dmap[ predLabel ] > dist:
 							dmap[ predLabel ] = dist
 				# Save answer
+				print(dmap)
 				ans1 = min(dmap, key=dmap.get)
 				del dmap[ans1]				
 				ans2 = min(dmap, key=dmap.get)
