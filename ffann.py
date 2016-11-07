@@ -124,9 +124,9 @@ class FeedForwardArtificialNeuralNetwork(object):
   def crossValidate(x,y,maxIters=3):
     ### Parameters ###
     # Number of layers (1 + output vs 2 + output)
-    layerNumbers = [2, 3] # [2] # [2, 3]
+    layerNumbers = [2] #[2, 3] # [2] # [2, 3]
     # Architectures: for 2 layer and 3 layer
-    sizes = [30, 50, 70] #[50] # [30, 50]
+    sizes = [20,30,40,50] # [30, 50, 70] #[50] # [30, 50]
     layerArch2 = [ [s] for s in sizes ]
     layerArch3 = [ [i, j] for i in sizes for j in sizes ]  
     # Alpha values
@@ -193,9 +193,9 @@ class FeedForwardArtificialNeuralNetwork(object):
           if gen % 50 == 0: p("Iter "+str(gen)+"\n") 
         for i,(v,y) in enumerate(zip(X,Y)): 
           if verbose:
-            if   i == len(X)   / 4: p("25%.")
-            elif i == len(X)   / 2: p("..50%.")
-            elif i == 3*len(X) / 4: p("..75%\n")
+            if   i == len(X)   / 4: p("25%.");    sys.stdout.flush()
+            elif i == len(X)   / 2: p("..50%.");  sys.stdout.flush()
+            elif i == 3*len(X) / 4: p("..75%\n"); sys.stdout.flush()
           self._backpropagateTrainingSingle(v, y)
         currWs = self.weightVec() 
         avgdiff = np.mean( [ abs(a - b) for a,b in zip(ws,currWs) ] )

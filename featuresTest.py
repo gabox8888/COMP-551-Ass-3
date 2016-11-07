@@ -19,9 +19,9 @@ dy			= "train_y.csv"
 test_x		= "test_x.bin"
 
 ### Learning parameters ###
-runLogReg = False 			# Run logisitc regression
-transform = False			# Transform concatenated data via PCA
-crossvalidateAnn = True		# Run cross-validation via the implemented ANN
+runLogReg = False 				# Run logisitc regression
+transform = False				# Transform concatenated data via PCA
+crossvalidateAnn = False		# Run cross-validation via the implemented ANN
 
 def main():
 	
@@ -64,31 +64,31 @@ def main():
 
 	##### Run Learning (custom ffann) #####
 	print("FFANN section")
-	ss, tes = 20000, 1000
+	ss, tes = 70000, 10000
 	numclasses = 19
 	data = np.array(     waveData     ) ## <--- Change to alter input data type
 	x, y = data[0:ss], train_y[0:ss]
 	print("Starting CV (dims = " + str( x.shape ) + ")")
 	if crossvalidateAnn:
-		FeedForwardArtificialNeuralNetwork.crossValidate(x,y,maxIters=3)
+		FeedForwardArtificialNeuralNetwork.crossValidate(x,y,maxIters=5)
 	else:
+		# Cr
 		d = data.shape[1]
 		ffann = FeedForwardArtificialNeuralNetwork(
 			d, 
 			numHiddenLayers = 2, 
-			alpha = 0.05, 
-			sizeOfHiddenLayers = [50, numclasses], #[35, 35, numclasses],
-			maxIters = 3)
+			alpha = 0.15, 
+			sizeOfHiddenLayers = [80, numclasses], #[35, 35, numclasses],
+			maxIters = 10)
 		ffann.display()
 		ffann.train(x, y) 
 		y_ann = ffann.predict( data[ss:ss+tes] )
 		ffann.display()
-		outvals = [str(y) for y in y_ann]
 		outY_val = train_y[ss:ss+tes]
-		anny = ffann.checkPerformance(outY_val, outvals)
-		print(y_ann[0:20])
-		print(anny[0:20])
-		print(outY_val[0:20])
+		anny = ffann.checkPerformance(outY_val, y_ann)
+		print(y_ann[0:5])
+		print(anny[0:5])
+		print(outY_val[0:5])
 
 
 if __name__ == '__main__': main()
