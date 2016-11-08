@@ -34,3 +34,8 @@ To run the CNN using the estimated digit centers (i.e. MNIST-CNN)
 	  Parameters are hard-coded. It saves an hdf5 model file used below.
 	- Run kerasCenterPred.py to perform the subimage extraction and prediction with the above model.
 
+	###
+	To run Theano CNN
+			Ensure training.bin and test.bin files are in data folder
+			Run driver.py
+
