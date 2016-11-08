@@ -1,7 +1,7 @@
 COMP 551 Assignment 3
 
 ###
-To run logistic regression:
+To run logistic regression (using sklearn):
 	- Set the file locations of the extracted feature representations (SURF, etc...) in the script featuresTest.py
  	- Run the python script featuresTest.py
  	  Set the following variables to true in the script
@@ -21,6 +21,8 @@ To run the implemented neural network
 		- For hyper-parameter selection via cross-validation, also set
 			crossvalidateAnn = True
 		  Else, set it to false to run a specific model parameterization
+		  Further, to get the results on the test set, let
+		  	runAnnOnTestSet = True
 		- Run featuresTest.py
 
 ###

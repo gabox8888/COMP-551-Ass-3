@@ -19,9 +19,10 @@ dy			= "train_y.csv"
 test_x		= "test_x.bin"
 
 ### Learning parameters ###
-runLogReg = False 				# Run logisitc regression
+runLogReg = False 				# Run logistic regression
 transform = False				# Transform concatenated data via PCA
 crossvalidateAnn = False		# Run cross-validation via the implemented ANN
+runAnnOnTestSet = True
 
 def main():
 	
@@ -32,6 +33,8 @@ def main():
 	waveData     = np.loadtxt(waveletFile, delimiter=",") # 100000 x 33
 	combinedData = [ np.concatenate((a,b,c,d)) for a,b,c,d in zip(surfData,minEvalData,hogData,waveData) ]	
 	train_x = (np.fromfile(dx, dtype='uint8')).reshape((100000,60,60))
+	test_x = (np.fromfile(dx, dtype='uint8')).reshape((100000,60,60))
+	waveTest = np.loadtxt("waveletTest.csv", delimiter=",")
 	train_y = np.array([ q.split(",")[1].strip() for q in open(dy,"r").readlines()[1:] ])
 
 	# Transform via PCA
@@ -64,31 +67,45 @@ def main():
 
 	##### Run Learning (custom ffann) #####
 	print("FFANN section")
-	ss, tes = 70000, 10000
+	ss, tes = 100000, 0 # Training set size, validation set size
 	numclasses = 19
 	data = np.array(     waveData     ) ## <--- Change to alter input data type
 	x, y = data[0:ss], train_y[0:ss]
 	print("Starting CV (dims = " + str( x.shape ) + ")")
+	# Run 2-fold cross val across hyper-params
 	if crossvalidateAnn:
 		FeedForwardArtificialNeuralNetwork.crossValidate(x,y,maxIters=5)
+	# Run a single model on a training and validation set specified above
 	else:
-		# Cr
+		# Create ANN
 		d = data.shape[1]
 		ffann = FeedForwardArtificialNeuralNetwork(
 			d, 
 			numHiddenLayers = 2, 
 			alpha = 0.15, 
-			sizeOfHiddenLayers = [80, numclasses], #[35, 35, numclasses],
+			sizeOfHiddenLayers = [100, numclasses], #[35, 35, numclasses],
 			maxIters = 10)
 		ffann.display()
-		ffann.train(x, y) 
-		y_ann = ffann.predict( data[ss:ss+tes] )
-		ffann.display()
-		outY_val = train_y[ss:ss+tes]
-		anny = ffann.checkPerformance(outY_val, y_ann)
-		print(y_ann[0:5])
-		print(anny[0:5])
-		print(outY_val[0:5])
+		# Train ANN
+		ffann.train(x, y)
+		# Generate predictions on Kaggle test set
+		if runAnnOnTestSet:
+			y_ann = ffann.predict(  waveTest  )
+			maxedYs = [ str(np.argmax(y)) for y in y_ann ]
+			outf = "output-test-ffann.csv"
+			with open(outf,"w") as w:
+				w.write("Id,Prediction")
+				for i,val in enumerate(maxedYs):
+					w.write(str(i) + "," + str(val) + "\n")
+		# Generate predictions on validation set
+		else:
+			y_ann = ffann.predict( data[ss:ss+tes] )
+			ffann.display()
+			outY_val = train_y[ss:ss+tes]
+			anny = ffann.checkPerformance(outY_val, y_ann)
+			print(y_ann[0:5])
+			print(anny[0:5])
+			print(outY_val[0:5])
 
 
 if __name__ == '__main__': main()

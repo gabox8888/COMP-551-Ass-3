@@ -1,19 +1,12 @@
 '''
-Trains a simple convnet on the MNIST dataset.
-Gets to 99.25% test accuracy after 12 epochs
-(there is still a lot of margin for parameter tuning).
-16 seconds per epoch on a GRID K520 GPU.
-
 Modified from:
 https://github.com/fchollet/keras/blob/master/examples/mnist_cnn.py
-
 '''
 
 from __future__ import print_function
 import numpy as np, os, sys
 np.random.seed(9713)  # for reproducibility
 
-# from keras.datasets import mnist
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation, Flatten
@@ -69,7 +62,6 @@ Y_test = np_utils.to_categorical(y_test, nb_classes)
 print("Building Model")
 
 model = Sequential()
-
 model.add(GaussianNoise(sigma,input_shape=input_shape))
 
 model.add(Convolution2D(nb_filters, kernel_size[0], kernel_size[1],
