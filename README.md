@@ -1,6 +1,11 @@
 COMP 551 Assignment 3
 
 ###
+To run logistic regression (by hand implementation):
+	- Set the file locations of the extracted feature representations (SURF, etc...) in the script featuresTest.py
+	- run each part of the the python script LogisticRegression.ipynb it will create a graph of the accuracy for each different feature vector on a validation and test set. 
+
+###
 To run logistic regression (using sklearn):
 	- Set the file locations of the extracted feature representations (SURF, etc...) in the script featuresTest.py
  	- Run the python script featuresTest.py
