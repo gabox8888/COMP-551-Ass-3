@@ -6,28 +6,28 @@ import os, sys, numpy as np, random as r, math
 # Used for performance measurement
 from sklearn import metrics as skm
 
-# Used for preprocessing the given image data
+# Used for preprocessing the "mnist sum" image data
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 
 # For testing the ANN
 def main():
   # Generate some practice data
-  d = 3
-  [xtrain,ytrain,xtest,ytest] = practiceMultiData(d, nc = 9, ntrain=450, ntest=150) #practiceData(d,2500,50)
+  d, nc = 4, 9
+  [xtrain,ytrain,xtest,ytest] = practiceMultiData(d, nc = nc, ntrain=7000, ntest=150) #practiceData(d,2500,50)
   # Create an ANN
   ffann = FeedForwardArtificialNeuralNetwork(d, 
-    numHiddenLayers = 3, 
-    alpha = 0.1, 
-    sizeOfHiddenLayers = [7, 7, 9])
-
+    numHiddenLayers = 2, 
+    alpha = 0.05, 
+    sizeOfHiddenLayers = [20, nc],
+    maxIters = 50)
   ffann.display()
   ffann.train(xtrain,ytrain) 
   y_ann = ffann.predict(xtest)
   ffann.display()
-  ffann.checkPerformance(ytest,y_ann)
+  ffann.checkPerformance([str(y) for y in ytest],y_ann)
 
-### Implementation of Feed-Forward Fully Connected Artificla Neural Network ###
+### Implementation of Feed-Forward Fully Connected Artificial Neural Network ###
 # Uses back-propagation with gradient descent, based on squared error loss 
 # Note: multiclass input should be given as an integer; it will be converted
 # to a 1-hot encoding. 
@@ -75,7 +75,7 @@ class FeedForwardArtificialNeuralNetwork(object):
                alpha = 0.05,            # Learning rate
                sizeOfHiddenLayers = [], # Size of the hidden layers
                defaultLayerSize = 5,    # Defaults for layer sizes (except for the output) 
-               maxIters = 100
+               maxIters = 100           # Max number of epochs
                ):  
 
     # Set defaults for hidden layer size (including single output node default)
@@ -103,22 +103,15 @@ class FeedForwardArtificialNeuralNetwork(object):
 
   def checkPerformance(self, y_true, y_comp, short=False):
     if self.isMulticlass:
-      # PredY (y_comp) will be 1-hot encoded, while trueY will be in the origin encoding
+      # PredY (y_comp) will be 1-hot encoded, while trueY will be in the original encoding
       # Assumes the encoding is for labels in 0 -> NumClasses
-      normDiff = lambda x,y: np.sqrt(sum([ (x[i] - y[i])**2 for i in range(0,len(x)) ]))
       maxedYs = [ str(np.argmax(y)) for y in y_comp ]
       if short:
         print("Acc = " + str(skm.accuracy_score(y_true,maxedYs)))
         return
       print("\nPerformance")
-      print("max"); print(maxedYs); print("true"); print(y_true)
       print('Accuracy: ' + str(skm.accuracy_score(y_true,maxedYs)))
-      # Also look at average 1-hot encoded vector metric difference
-      # Little non-sensical though since a reasonable predictor should take the max
-      preprocForEncoder = [[q] for q in y_true]
-      encodedTrue = self.labEncoder.transform(preprocForEncoder).toarray()
-      mean2NormDistance = np.mean([ normDiff(u,v) for u,v in zip(encodedTrue,y_comp) ])
-      print("Mean 2-norm 1-hot vec dist: " + str(mean2NormDistance))
+      return maxedYs
     else: # For binary classification, do some extra things
       y_c = [ 1 if q[0] > 0.5 else 0 for q in y_comp ]
       print('Accuracy: ' + str(skm.accuracy_score(y_true,y_c)))
@@ -126,18 +119,18 @@ class FeedForwardArtificialNeuralNetwork(object):
       se = sum( [ (yt - yc[0])**2 for yt,yc in zip(y_true,y_comp) ] ) / float(len(y_c))
       print('Average Squared Error: ' + str( se ))
 
-  # 
+  # Static Cross-validation method for hyper-parameter selection
   @staticmethod
   def crossValidate(x,y,maxIters=3):
     ### Parameters ###
     # Number of layers (1 + output vs 2 + output)
-    layerNumbers = [2, 3]
+    layerNumbers = [2] #[2, 3] # [2] # [2, 3]
     # Architectures: for 2 layer and 3 layer
-    sizes = [10,20,30,40]
+    sizes = [20,30,40,50] # [30, 50, 70] #[50] # [30, 50]
     layerArch2 = [ [s] for s in sizes ]
-    layerArch3 = [ [i,j] for i in sizes for j in sizes ]  
+    layerArch3 = [ [i, j] for i in sizes for j in sizes ]  
     # Alpha values
-    alphas = [0.05, 0.1]
+    alphas = [0.15] #[0.05, 0.1, 0.15]
 
     ### Preprocessing ###
     classSize = 19
@@ -154,13 +147,10 @@ class FeedForwardArtificialNeuralNetwork(object):
           sizeOfHiddenLayers = hiddenLayerSizes,
           maxIters = maxIters)
       print(str(alpha) + ", " + str(hiddenLayerSize))
-#      ffann.display()
-#      ss, ts = trainSize, trainSize + testSize
-      n = len(x) / 2
-#      xtrain, ytrain, xtest, ytest = x[0:n], y[0:n], x[n:], y[n:]  # x[0:ss], y[0:ss], x[ss:ts], y[ss:ts]
+      n = int(len(x) / 2)
       def cv2(xtrain,ytrain,xtest,ytest):
         ffann.train(xtrain,ytrain,silent=True) 
-        y_ann = ffann.predict(xtest,silent=True)
+        y_ann = ffann.predict(xtest)
         ffann.checkPerformance(ytest, y_ann, short=True)
       cv2(x[0:n], y[0:n], x[n:], y[n:])
       cv2(x[n:], y[n:], x[0:n], y[0:n])
@@ -179,7 +169,7 @@ class FeedForwardArtificialNeuralNetwork(object):
             annCv(alpha, layerNum, hiddenLayerSize)
 
   # Training method
-  def train(self,X,Y,method=1, silent=False):
+  def train(self, X, Y, method=1, silent=False):
     # Scale the data (the same scaler will be applied to the test data, but not fit to it of course)
     self.scaler = StandardScaler()
     self.scaler.fit( X )
@@ -194,7 +184,7 @@ class FeedForwardArtificialNeuralNetwork(object):
     assert not islist(Y[0]) or (islist(Y[0]) and len(Y[0])==self.numClasses), "Label size mismatch"
     # Method 1: run backprop once per x \in X
     if method == 1:
-      epsilon, maxIters, minIters, verbose = 0.0000001, self.maxIters, 250, True ####################################
+      epsilon, maxIters, minIters, verbose = 0.0000001, self.maxIters, 250, True # Parameters
       if silent: verbose = False
       p, ws = lambda x: sys.stdout.write(x), self.weightVec()
       for gen in range(0,maxIters):
@@ -203,9 +193,9 @@ class FeedForwardArtificialNeuralNetwork(object):
           if gen % 50 == 0: p("Iter "+str(gen)+"\n") 
         for i,(v,y) in enumerate(zip(X,Y)): 
           if verbose:
-            if i == len(X)   / 4: p("25%.")
-            elif i == len(X)   / 2: p("..50%.")
-            elif i == 3*len(X) / 4: p("..75%\n")
+            if   i == len(X)   / 4: p("25%.");    sys.stdout.flush()
+            elif i == len(X)   / 2: p("..50%.");  sys.stdout.flush()
+            elif i == 3*len(X) / 4: p("..75%\n"); sys.stdout.flush()
           self._backpropagateTrainingSingle(v, y)
         currWs = self.weightVec() 
         avgdiff = np.mean( [ abs(a - b) for a,b in zip(ws,currWs) ] )
@@ -249,6 +239,7 @@ class FeedForwardArtificialNeuralNetwork(object):
     return currOutput if not returnStorage else storage
 
   # Correct the weights based on the error of a single example (as in Hastie et al)
+  # This is a single step of backprop via stochastic gradient descent
   def _backpropagateTrainingSingle(self, x, y_true):
     o, alpha = self.computeOutput(x,True), self.alpha
     # Update final output nodes
@@ -271,20 +262,10 @@ class FeedForwardArtificialNeuralNetwork(object):
         deltaCurr = deltaProj * x_out * (1.0 - x_out) # Delta for this layer
         neuron.update(alpha, deltaCurr, o[i])
 
-# Simple method for generating some practice data for binary classification
-def practiceData(d, ntrain=100, ntest=50):
-  n = int( (ntrain + ntest) / 2 )
-  mu1, mu2, sigma1, sigma2 = 1, 9, 4, 5
-  x_u, y_u = list(np.random.normal(mu1,sigma1,(n,d))) + list(np.random.normal(mu2,sigma2,(n,d))), [0]*n + [1]*n
-  index_shuffled = list(range( n*2 ))
-  r.shuffle(index_shuffled)
-  x, y = [ x_u[i] for i in index_shuffled ], [ y_u[i] for i in index_shuffled]
-  return [ x[0:ntrain], y[0:ntrain], x[ntrain:], y[ntrain:] ]
-
 # Generates simple data set for testing multi-class classification
 def practiceMultiData(d, nc=10, ntrain=500, ntest=50):
   n = int( (ntrain + ntest) / nc )
-  means, variance = list(range(0,nc)), 0.2
+  means, variance = list(range(0,nc)), 0.15
   dataNest = ( np.random.normal(mean, variance,(n,d)) for mean in means )
   labNest = [ [k]*n for k in means ]
   flat = lambda xs: [w for u in xs for w in u]
